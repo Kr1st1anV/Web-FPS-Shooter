@@ -18,8 +18,8 @@ renderer.setAnimationLoop( animate )
 document.body.appendChild( renderer.domElement )
 
 //Setup Floor
-const floorGeo = new THREE.PlaneGeometry(50,50)
-const floorMat = new THREE.MeshBasicMaterial( { color: 0xa6ff33, side: THREE.DoubleSide })
+const floorGeo = new THREE.BoxGeometry(50,50)
+const floorMat = new THREE.MeshBasicMaterial( { color: 0xa6ff33 })
 const floor = new THREE.Mesh( floorGeo, floorMat )
 floor.rotateX(Math.PI/2)
 floor.position.y = -10
@@ -31,7 +31,7 @@ scene.add(floor)
 
 
 //Character Geo and Mat
-const geometry = new THREE.BoxGeometry( 1, 1, 1 )
+const geometry = new THREE.BoxGeometry( 1, 15 )
 const material = new THREE.MeshBasicMaterial( { color: 0x00ff00 } )
 const cube = new THREE.Mesh( geometry, material )
 cube.position.y = -10
