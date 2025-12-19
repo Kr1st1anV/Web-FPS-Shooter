@@ -2,8 +2,7 @@ import * as THREE from 'three'
 import { PointerLockControls } from 'three/examples/jsm/Addons.js'
 import { Octree } from 'three/examples/jsm/Addons.js'
 import { Capsule } from 'three/examples/jsm/Addons.js'
-import { horizontalMovement }  from "./characterMovement.js"
-import { frontFacing } from 'three/tsl'
+import { PlayerController } from './characterMovement'
 
 //Setup Scene
 const scene = new THREE.Scene()
@@ -41,7 +40,6 @@ scene.add( cube )
 //FPS Camera
 const controls = new PointerLockControls(camera, document.body);
 
-//OrbitControls - Look at documentation for more details
 //const controls = new FirstPersonControls(camera, renderer.domElement) - Cool concept with FirstPersonControls - Grappling Movement
 
 
@@ -58,29 +56,16 @@ worldOctree.fromGraphNode(cube)
 //     worldOctree.fromGraphNode(gltf.scene);
 // });
 
-function playerCollision() {
-  const result = worldOctree.capsuleIntersect(playerHitbox)
-
-  if (result) {
-    playerHitbox.translate(result.normal.multiplyScalar(result.depth))
-  }
-}
-
+const player = new PlayerController(camera, playerHitbox, worldOctree, controls)
 
 //Game Loop
 const clock = new THREE.Clock()
-const walkingSpeed = 10
 
 function animate() {
   const delta = clock.getDelta()
 
-  movement()
-  playerHitbox.translate(playerVelocity.multiplyScalar(delta))
-  playerCollision()
-  playerHitbox.getCenter(playerPosition)
-  camera.position.x = playerPosition.x
-  camera.position.y = playerPosition.y
-  camera.position.z = playerPosition.z
+  player.update(delta)
+
   renderer.render( scene, camera )
 }
 
@@ -90,3 +75,10 @@ window.addEventListener("resize", () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
   
 })
+
+window.addEventListener("mousedown", function(event) {
+        //console.log(event.button)
+            if (event.button === 0) {
+                controls.lock()
+            }
+        })
