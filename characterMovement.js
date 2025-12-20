@@ -7,8 +7,17 @@ export class PlayerController {
         this.camera.rotation.order = "YXZ"
         this.playerHitbox = playerHitbox;
         this.worldOctree = worldOctree;
-        this.controls = new PointerLockControls(this.camera, document.body);
         this.socket = socket
+
+        this.controls = new PointerLockControls(this.camera, document.body);
+        this.controls.disconnect();
+
+        this.mouseDeltaX = 0;
+        this.mouseDeltaY = 0;
+
+        this.pitch = 0
+        this.yaw = 0
+        this.lookSensitivity = 0.0015
 
         this.playerVelocity = new THREE.Vector3();
         this.directionVect = new THREE.Vector3();
@@ -28,6 +37,10 @@ export class PlayerController {
             jump: false,
             crouch: false
         };
+        // Sync manual angles with the initial camera rotation
+        this.yaw = this.camera.rotation.y;
+        this.pitch = this.camera.rotation.x;
+
         this.startEventListener();
     } 
 
@@ -50,12 +63,35 @@ export class PlayerController {
             if (e.code == "Space") this.keyPress.jump = false;
             if (e.code == "ShiftLeft") this.keyPress.crouch = false;
         });
-        window.addEventListener("mousedown", (event) => {
-        //console.log(event.button)
-            if (event.button === 0) {
-                this.controls.lock()
+        document.addEventListener("mousemove", (event) => {
+            if (document.pointerLockElement == document.body) {
+                this.mouseDeltaX += event.movementX || 0;
+                this.mouseDeltaY += event.movementY || 0;
             }
-        })
+        });
+
+        window.addEventListener("mousedown", (event) => {
+            if (event.button === 0) {
+                const canvas = document.querySelector('body');
+                
+                // This is the PRO way to stop snapping for gaming mice
+                const promise = canvas.requestPointerLock({
+                    unadjustedMovement: true, // This bypasses Windows acceleration entirely
+                });
+
+                // Fallback for older browsers
+                if (!promise) {
+                    canvas.requestPointerLock();
+                }
+                
+                promise.catch(error => {
+                    if (error.name === "NotSupportedError") {
+                        // Browser doesn't support unadjustedMovement, use standard
+                        canvas.requestPointerLock();
+                    }
+                });
+            }
+        });
     }
 
     playerCollision() {
@@ -118,6 +154,17 @@ export class PlayerController {
 update(delta) {
     this.movement(delta);
 
+    this.yaw -= this.mouseDeltaX * this.lookSensitivity;
+    this.pitch -= this.mouseDeltaY * this.lookSensitivity;
+
+    this.mouseDeltaX = 0;
+    this.mouseDeltaY = 0;
+
+    this.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.pitch));
+
+    this.camera.rotation.x = this.pitch;
+    this.camera.rotation.y = this.yaw;
+
     const targetHeight = this.keyPress.crouch ? 0.5 : 1.0; 
     // Lerp the 'end' point for a smooth head bob/crouch
     this.playerHitbox.end.y = THREE.MathUtils.lerp(this.playerHitbox.end.y, this.playerHitbox.start.y + targetHeight, 0.2);
@@ -125,27 +172,15 @@ update(delta) {
     this.playerHitbox.translate(this.playerVelocity.clone().multiplyScalar(delta));
     this.playerCollision();
 
-    // Stable Rotation Calculation (Fixes the 180-degree snap)
-    const direction = new THREE.Vector3();
-    this.camera.getWorldDirection(direction);
-    const angleY = Math.atan2(direction.x, direction.z);
+    this.camera.position.copy(this.playerHitbox.end);
+    this.camera.position.y += 0.1;
 
     const myData = {
-        position: {
-            x: this.playerHitbox.start.x,
-            y: this.playerHitbox.start.y,
-            z: this.playerHitbox.start.z
-        },
-        rotation: {
-            y: angleY // Sending the absolute world yaw
-        },
+        position: this.playerHitbox.start,
+        rotation: { y: this.yaw },
         isCrouching: this.keyPress.crouch
     };
 
     this.socket.emit('playerMovement', myData);
-
-    // Camera Attachment
-    this.camera.position.copy(this.playerHitbox.end);
-    this.camera.position.y += 0.1; // Eye level offset
     }
 }

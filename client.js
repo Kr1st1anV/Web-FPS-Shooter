@@ -8,6 +8,37 @@ const socket = io("http://localhost:3000");
 
 const otherPlayers = {};
 
+//Crosshair
+const style = document.createElement('style');
+style.innerHTML = `
+    #crosshair {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        width: 20px;
+        height: 20px;
+        border: 2px solid white;
+        border-radius: 50%;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+        z-index: 100;
+    }
+    #crosshair::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 2px;
+        height: 2px;
+        background: red;
+        transform: translate(-50%, -50%);
+    }
+`;
+document.head.appendChild(style);
+
+const crosshair = document.createElement('div');
+crosshair.id = 'crosshair';
+document.body.appendChild(crosshair);
 
 //Setup Scene
 const scene = new THREE.Scene()
