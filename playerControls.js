@@ -8,6 +8,7 @@ export class PlayerController {
         this.playerHitbox = playerHitbox;
         this.worldOctree = worldOctree;
         this.socket = socket
+        this.gameActive = false
 
         this.controls = new PointerLockControls(this.camera, document.body);
         this.controls.disconnect();
@@ -35,6 +36,7 @@ export class PlayerController {
             left: false,
             right: false,
             jump: false,
+            sprint: false,
             crouch: false
         };
         // Sync manual angles with the initial camera rotation
@@ -45,14 +47,29 @@ export class PlayerController {
     } 
 
     startEventListener() {
+        window.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        }, false);
+
         window.addEventListener("keydown", (e) => {
+            if(!this.gameActive) return
+
+            if (e.ctrlKey || e.metaKey) {
+                // This stops Ctrl+S, Ctrl+P, etc.
+                e.preventDefault();
+            }
+    
+            if (["KeyW", "KeyS", "KeyA", "KeyD", "KeyR", "Space", "ShiftLeft", "ControlLeft"].includes(e.code)) {
+                e.preventDefault(); 
+            }
+            console.log(e.code)
             if (e.code == "KeyW") this.keyPress.forward = true;
             if (e.code == "KeyS") this.keyPress.backward = true;
             if (e.code == "KeyA") this.keyPress.left = true;
             if (e.code == "KeyD") this.keyPress.right = true;
             if (e.code == "Space") this.keyPress.jump = true;
-            if (e.code == "ShiftLeft") this.keyPress.crouch = true;
-            if (e.key == "p") this.controls.unlock();
+            if (e.code == "ControlLeft") this.keyPress.crouch = true;
+            if (e.code == "ShiftLeft") this.keyPress.sprint = true;
         });
 
         window.addEventListener("keyup", (e) => {
@@ -61,7 +78,8 @@ export class PlayerController {
             if (e.code == "KeyA") this.keyPress.left = false;
             if (e.code == "KeyD") this.keyPress.right = false;
             if (e.code == "Space") this.keyPress.jump = false;
-            if (e.code == "ShiftLeft") this.keyPress.crouch = false;
+            if (e.code == "ShiftLeft") this.keyPress.sprint = false;
+            if (e.code == "ControlLeft") this.keyPress.crouch = false;
         });
         document.addEventListener("mousemove", (event) => {
             if (document.pointerLockElement == document.body) {
@@ -70,26 +88,32 @@ export class PlayerController {
             }
         });
 
-        window.addEventListener("mousedown", (event) => {
-            if (event.button === 0) {
-                const canvas = document.querySelector('body');
-                
-                // This is the PRO way to stop snapping for gaming mice
-                const promise = canvas.requestPointerLock({
-                    unadjustedMovement: true, // This bypasses Windows acceleration entirely
-                });
-
-                // Fallback for older browsers
-                if (!promise) {
-                    canvas.requestPointerLock();
+        window.addEventListener("mousedown", (e) => {
+            if (this.gameActive && e.button === 0) {
+                this.shoot();
+            }
+            if (e.button === 0) {
+                if (!document.fullscreenElement) {
+                    document.documentElement.requestFullscreen().catch((err) => {
+                        console.warn(`Fullscreen failed: ${err.message}`);
+                    });
                 }
-                
-                promise.catch(error => {
-                    if (error.name === "NotSupportedError") {
-                        // Browser doesn't support unadjustedMovement, use standard
-                        canvas.requestPointerLock();
-                    }
-                });
+                if (document.pointerLockElement !== document.body) {
+                    document.body.requestPointerLock({
+                        unadjustedMovement: true, 
+                    });
+                }
+            }
+        });
+        document.addEventListener('pointerlockchange', () => {
+            if (document.pointerLockElement === document.body) {
+                this.gameActive = true;
+                console.log("Game Input Enabled");
+            } else {
+                this.gameActive = false;
+                // Reset keys so player doesn't keep running forever if they hit Esc
+                Object.keys(this.keyPress).forEach(key => this.keyPress[key] = false);
+                console.log("Game Input Disabled");
             }
         });
     }
@@ -134,6 +158,12 @@ export class PlayerController {
             this.directionVect.normalize();
         }
 
+        if (this.keyPress.sprint) {
+            this.playerWalkSpeed = 8
+        } else {
+            this.playerWalkSpeed = 4
+        }
+
         // Apply horizontal velocity
         this.playerVelocity.x = this.directionVect.x * this.playerWalkSpeed;
         this.playerVelocity.z = this.directionVect.z * this.playerWalkSpeed;
@@ -148,39 +178,43 @@ export class PlayerController {
         if (!this.onGround) {
             this.playerVelocity.y -= this.gravity * delta;
         }
+    }
+    shoot() {
+        const pointer = new THREE.Vector2()
+        const raycaster = new THREE.Raycaster()
     }  
 
     // Replace your update(delta) function with this:
-update(delta) {
-    this.movement(delta);
+    update(delta) {
+        this.movement(delta);
 
-    this.yaw -= this.mouseDeltaX * this.lookSensitivity;
-    this.pitch -= this.mouseDeltaY * this.lookSensitivity;
+        this.yaw -= this.mouseDeltaX * this.lookSensitivity;
+        this.pitch -= this.mouseDeltaY * this.lookSensitivity;
 
-    this.mouseDeltaX = 0;
-    this.mouseDeltaY = 0;
+        this.mouseDeltaX = 0;
+        this.mouseDeltaY = 0;
 
-    this.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.pitch));
+        this.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.pitch));
 
-    this.camera.rotation.x = this.pitch;
-    this.camera.rotation.y = this.yaw;
+        this.camera.rotation.x = this.pitch;
+        this.camera.rotation.y = this.yaw;
 
-    const targetHeight = this.keyPress.crouch ? 0.5 : 1.0; 
-    // Lerp the 'end' point for a smooth head bob/crouch
-    this.playerHitbox.end.y = THREE.MathUtils.lerp(this.playerHitbox.end.y, this.playerHitbox.start.y + targetHeight, 0.2);
+        const targetHeight = this.keyPress.crouch ? 0.5 : 1.0; 
+        // Lerp the 'end' point for a smooth head bob/crouch
+        this.playerHitbox.end.y = THREE.MathUtils.lerp(this.playerHitbox.end.y, this.playerHitbox.start.y + targetHeight, 0.2);
 
-    this.playerHitbox.translate(this.playerVelocity.clone().multiplyScalar(delta));
-    this.playerCollision();
+        this.playerHitbox.translate(this.playerVelocity.clone().multiplyScalar(delta));
+        this.playerCollision();
 
-    this.camera.position.copy(this.playerHitbox.end);
-    this.camera.position.y += 0.1;
+        this.camera.position.copy(this.playerHitbox.end);
+        this.camera.position.y += 0.1;
 
-    const myData = {
-        position: this.playerHitbox.start,
-        rotation: { y: this.yaw },
-        isCrouching: this.keyPress.crouch
-    };
+        const myData = {
+            position: this.playerHitbox.start,
+            rotation: { y: this.yaw },
+            isCrouching: this.keyPress.crouch
+        };
 
-    this.socket.emit('playerMovement', myData);
+        this.socket.emit('playerMovement', myData);
     }
 }

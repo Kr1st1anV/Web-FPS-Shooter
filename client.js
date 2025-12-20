@@ -2,40 +2,69 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/Addons.js'
 import { Octree } from 'three/examples/jsm/Addons.js'
 import { Capsule } from 'three/examples/jsm/Addons.js'
-import { PlayerController } from './characterMovement'
+import Stats from 'three/examples/jsm/libs/stats.module.js'
+import { PlayerController } from './playerControls'
 import { io } from "socket.io-client";
-const socket = io("http://localhost:3000");
-
+const socket = io();
 const otherPlayers = {};
+
+//FPS Checker
+const stats = new Stats()
+stats.showPanel(0)
+document.body.appendChild(stats.dom)
+
+const blocker = document.createElement('div');
+blocker.id = 'blocker';
+blocker.innerHTML = `
+    <div id="instructions">
+        <b style="font-size:36px">CLICK TO PLAY</b><br />
+        ( W, A, S, D = Move , Space = Jump , Mouse = Look )
+    </div>
+`;
+// Add some basic CSS
+Object.assign(blocker.style, {
+    position: 'absolute', top: '0', left: '0', width: '100%', height: '100%',
+    backgroundColor: 'rgba(0,0,0,0.5)', color: 'white', display: 'flex',
+    justifyContent: 'center', alignItems: 'center', textAlign: 'center',
+    cursor: 'pointer', zIndex: '200', userSelect: "none", webkitUserSelect: "none", mozUserSelect: "none", msUserSelect: "none"});
+document.body.appendChild(blocker);
+
+blocker.addEventListener('click', () => {
+    document.body.requestPointerLock({ unadjustedMovement: true });
+    document.documentElement.requestFullscreen();
+});
+
+// Hide/Show blocker based on lock state
+document.addEventListener('pointerlockchange', () => {
+    blocker.style.display = (document.pointerLockElement === document.body) ? 'none' : 'flex';
+});
 
 //Crosshair
 const style = document.createElement('style');
 style.innerHTML = `
     #crosshair {
         position: fixed;
-        top: 50%;
-        left: 50%;
-        width: 20px;
-        height: 20px;
-        border: 2px solid white;
+        top: 50%; left: 50%;
+        width: 16px; height: 16px;
+        border: 2px solid rgba(255, 255, 255, 0.8);
         border-radius: 50%;
         transform: translate(-50%, -50%);
         pointer-events: none;
         z-index: 100;
     }
-    #crosshair::before {
+    #crosshair::after {
         content: '';
         position: absolute;
-        top: 50%;
-        left: 50%;
-        width: 2px;
-        height: 2px;
+        top: 50%; left: 50%;
+        width: 4px; height: 4px;
         background: red;
+        border-radius: 50%;
         transform: translate(-50%, -50%);
     }
 `;
 document.head.appendChild(style);
 
+// Create the element
 const crosshair = document.createElement('div');
 crosshair.id = 'crosshair';
 document.body.appendChild(crosshair);
@@ -56,31 +85,51 @@ renderer.setSize( window.innerWidth, window.innerHeight )
 renderer.setAnimationLoop( animate )
 document.body.appendChild( renderer.domElement )
 
-//Setup Floor
-const floorGeo = new THREE.BoxGeometry(50,50)
-const floorMat = new THREE.MeshStandardMaterial( { color: 0xa6ff33 })
-const floor = new THREE.Mesh( floorGeo, floorMat )
-floor.rotateX(Math.PI/2)
-floor.position.y = -10
-scene.add(floor)
-
-//Wall Geo and Mat
-const geometry = new THREE.BoxGeometry( 1, 15, 15 )
-const material = new THREE.MeshStandardMaterial( { color: 0x00ff00 } )
-const cube = new THREE.Mesh( geometry, material )
-cube.position.y = -3
-scene.add( cube )
-
-//const controls = new FirstPersonControls(camera, renderer.domElement) - Cool concept with FirstPersonControls - Grappling Movement
-
 const worldOctree = new Octree()
 const spawn = new THREE.Vector3(10,0,0)
 const playerHitbox = new Capsule(new THREE.Vector3(spawn.x ,0.35, spawn.z),
                                  new THREE.Vector3(spawn.x, 1.0, spawn.z), 
                                  0.35)
 
+//Setup Floor
+const floorGeo = new THREE.BoxGeometry(50,50)
+const floorMat = new THREE.MeshStandardMaterial( { color: 0xa6ff33 })
+const floor = new THREE.Mesh( floorGeo, floorMat )
+floor.rotateX(Math.PI/2)
+scene.add(floor)
 worldOctree.fromGraphNode(floor)
+
+//Wall Geo and Mat
+const geometry = new THREE.BoxGeometry( 10, 1.5, 10 )
+const material = new THREE.MeshStandardMaterial( { color: 0x555555 } )
+const cube = new THREE.Mesh( geometry, material )
+scene.add( cube )
 worldOctree.fromGraphNode(cube)
+
+for (let i = 0; i < 2; i++) {
+    const wallGeo = new THREE.BoxGeometry( 1, 4, 10 )
+    const wallMat = new THREE.MeshStandardMaterial( { color: 0x555555} )
+    const wall = new THREE.Mesh( wallGeo, wallMat )
+    wall.position.x = 20 * (-1)**(i) 
+    wall.position.y = 2
+    scene.add( wall )
+    worldOctree.fromGraphNode(wall)
+}
+
+for (let i = 0; i < 2; i++) {
+    const wallGeo = new THREE.BoxGeometry( 1, 4, 10 )
+    const wallMat = new THREE.MeshStandardMaterial( { color: 0x555555 } )
+    const wall = new THREE.Mesh( wallGeo, wallMat )
+    wall.position.z = 20 * (-1)**(i) 
+    wall.position.y = 2
+    wall.rotateY(Math.PI/2)
+    scene.add( wall )
+    worldOctree.fromGraphNode(wall)
+}
+
+//const controls = new FirstPersonControls(camera, renderer.domElement) - Cool concept with FirstPersonControls - Grappling Movement
+
+
 //When adding maps
 // loader.load('map.glb', (gltf) => {
 //     scene.add(gltf.scene);
@@ -122,17 +171,18 @@ const clock = new THREE.Clock()
 const max_steps = 5
 
 function animate() {
-  const delta = Math.min(0.05, clock.getDelta())
+    stats.begin()
+    const delta = Math.min(0.05, clock.getDelta())
   
-  for (let i = 0; i < max_steps; i++) {
-    player.update(delta / max_steps)
-  }
+    for (let i = 0; i < max_steps; i++) {
+        player.update(delta / max_steps)
+    }
 
-  for(let id in otherPlayers) {
-    const puppet = otherPlayers[id]
+    for(let id in otherPlayers) {
+        const puppet = otherPlayers[id]
 
         // Replace the rotation lerp inside animate() with this:
-    let diff = puppet.targetRotationY - puppet.rotation.y;
+        let diff = puppet.targetRotationY - puppet.rotation.y;
 
     // Normalize the angle so it takes the shortest turn
     while (diff < -Math.PI) diff += Math.PI * 2;
@@ -150,6 +200,8 @@ function animate() {
   }
 
   renderer.render( scene, camera )
+
+  stats.end()
 }
 
 

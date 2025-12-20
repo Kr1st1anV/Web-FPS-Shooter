@@ -1,9 +1,10 @@
 const express = require("express")
+app.use(express.static("dist"))
 const app = express()
 const http = require("http").createServer(app)
 const io = require("socket.io")(http, {
     cors: {
-        origin: "http://localhost:5173",
+        origin: "http://10.0.0.126:5173",
         methods: ["GET", "POST"]
     }
 })
@@ -72,7 +73,11 @@ io.on('connection', (socket) => {
     });
 });
 
-http.listen(3000, () => console.log('Server running on port 3000'));
+const PORT = process.env.PORT || 3000
+
+http.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on port ${PORT}`)
+    });
 
 //Run Server - node server.js
 //Run Clients - npx vite
