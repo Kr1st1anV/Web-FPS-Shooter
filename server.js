@@ -1,13 +1,8 @@
 const express = require("express")
-app.use(express.static("dist"))
+const path = require("path")
 const app = express()
 const http = require("http").createServer(app)
-const io = require("socket.io")(http, {
-    cors: {
-        origin: "http://0.0.0.0:5173",
-        methods: ["GET", "POST"]
-    }
-})
+const io = require("socket.io")(http)
 
 const players = {};
 const AFK_TIMEOUT = 5 * 60 * 1000 // 5 minutes in milliseconds
@@ -72,6 +67,14 @@ io.on('connection', (socket) => {
         io.emit('playerDisconnected', socket.id);
     });
 });
+
+app.use(express.static(path.join(__dirname, 'dist')));
+
+// Route every request to the index.html in dist
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
+
 
 const PORT = process.env.PORT || 3000
 
