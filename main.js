@@ -1,8 +1,8 @@
-import * as THREE from 'three'
-import { Octree } from 'three/examples/jsm/Addons.js'
-import { Capsule } from 'three/examples/jsm/Addons.js'
+import * as THREE from './node_modules/three'
+import { Octree } from './node_modules/three/examples/jsm/Addons.js'
+import { Capsule } from './node_modules/three/examples/jsm/Addons.js'
 import { PlayerController } from './characterMovement'
-import { io } from "socket.io-client";
+import { io } from "./node_modules/socket.io-client";
 const socket = io("http://localhost:3000");
 
 const otherPlayers = {};

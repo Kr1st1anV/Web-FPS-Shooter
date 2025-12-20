@@ -1,5 +1,5 @@
-import * as THREE from "three"
-import { PointerLockControls } from "three/examples/jsm/Addons.js";
+import * as THREE from "./node_modules/three"
+import { PointerLockControls } from "./node_modules/three/examples/jsm/Addons.js";
 
 export class PlayerController {
     constructor(camera, playerHitbox, worldOctree, socket) {
