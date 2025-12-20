@@ -68,14 +68,6 @@ io.on('connection', (socket) => {
     });
 });
 
-app.use(express.static(path.join(__dirname, 'dist')));
-
-// Route every request to the index.html in dist
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-});
-
-
 const PORT = process.env.PORT || 3000
 
 http.listen(PORT, "0.0.0.0", () => {
