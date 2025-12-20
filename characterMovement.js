@@ -1,19 +1,19 @@
 import * as THREE from "three"
-import { PointerLockControls } from 'three/examples/jsm/Addons.js'
+import { PointerLockControls } from "three/examples/jsm/Addons.js";
 
 export class PlayerController {
-    constructor(camera, playerHitbox, worldOctree) {
+    constructor(camera, playerHitbox, worldOctree, socket) {
         this.camera = camera;
         this.playerHitbox = playerHitbox;
         this.worldOctree = worldOctree;
         this.controls = new PointerLockControls(this.camera, document.body);
+        this.socket = socket
 
         this.playerVelocity = new THREE.Vector3();
         this.directionVect = new THREE.Vector3();
         this.forward = new THREE.Vector3();
         this.right = new THREE.Vector3();
         
-        // ADJUSTED VALUES: Gravity needs to be higher but multiplied by delta
         this.gravity = 30.0; 
         this.jump_force = 8.0;
         this.playerWalkSpeed = 4;
@@ -24,18 +24,21 @@ export class PlayerController {
             backward: false,
             left: false,
             right: false,
-            jump: false
+            jump: false,
+            crouch: false
         };
         this.startEventListener();
     } 
 
     startEventListener() {
         window.addEventListener("keydown", (e) => {
+            console.log(e.code)
             if (e.code == "KeyW") this.keyPress.forward = true;
             if (e.code == "KeyS") this.keyPress.backward = true;
             if (e.code == "KeyA") this.keyPress.left = true;
             if (e.code == "KeyD") this.keyPress.right = true;
             if (e.code == "Space") this.keyPress.jump = true;
+            if (e.code == "ShiftLeft") this.keyPress.crouch = true;
             if (e.key == "p") this.controls.unlock();
         });
 
@@ -45,7 +48,14 @@ export class PlayerController {
             if (e.code == "KeyA") this.keyPress.left = false;
             if (e.code == "KeyD") this.keyPress.right = false;
             if (e.code == "Space") this.keyPress.jump = false;
+            if (e.code == "ShiftLeft") this.keyPress.crouch = false;
         });
+        window.addEventListener("mousedown", (event) => {
+        //console.log(event.button)
+            if (event.button === 0) {
+                this.controls.lock()
+            }
+        })
     }
 
     playerCollision() {
@@ -105,15 +115,28 @@ export class PlayerController {
     }  
 
     update(delta) {
-        this.movement(delta);
+    this.movement(delta);
+    this.playerHitbox.translate(this.playerVelocity.clone().multiplyScalar(delta));
+    this.playerCollision();
 
-        // Apply total velocity to position
-        const deltaMove = this.playerVelocity.clone().multiplyScalar(delta);
-        this.playerHitbox.translate(deltaMove);
+    // 1. Prepare the data package
+    // We use 'this.playerHitbox.start' because that represents the feet/base position
+    const myData = {
+        position: {
+            x: this.playerHitbox.end.x,
+            y: this.playerHitbox.end.y,
+            z: this.playerHitbox.end.z
+        },
+        rotation: {
+            y: this.camera.rotation.y // Other players need to see where you are looking
+        },
+        isCrouching: this.keyPress.crouch
+    };
 
-        this.playerCollision();
+    // 2. Send it to the server!
+    // We usually send this every frame, or 30 times a second
+    this.socket.emit('playerMovement', myData);
 
-        // Sync camera to the TOP of the capsule (the head), not the center
-        this.camera.position.copy(this.playerHitbox.end);
+    this.camera.position.copy(this.playerHitbox.end);
     }
 }
