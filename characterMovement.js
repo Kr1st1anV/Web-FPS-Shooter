@@ -4,6 +4,7 @@ import { PointerLockControls } from "three/examples/jsm/Addons.js";
 export class PlayerController {
     constructor(camera, playerHitbox, worldOctree, socket) {
         this.camera = camera;
+        this.camera.rotation.order = "YXZ"
         this.playerHitbox = playerHitbox;
         this.worldOctree = worldOctree;
         this.controls = new PointerLockControls(this.camera, document.body);
@@ -32,7 +33,6 @@ export class PlayerController {
 
     startEventListener() {
         window.addEventListener("keydown", (e) => {
-            console.log(e.code)
             if (e.code == "KeyW") this.keyPress.forward = true;
             if (e.code == "KeyS") this.keyPress.backward = true;
             if (e.code == "KeyA") this.keyPress.left = true;
@@ -78,14 +78,14 @@ export class PlayerController {
     }
 
     movement(delta) {
-        // 1. Get orientation
+        // Get orientation
         this.camera.getWorldDirection(this.directionVect);
         this.directionVect.y = 0;
         this.directionVect.normalize();
         this.forward.copy(this.directionVect);
         this.right.crossVectors(this.forward, this.camera.up);
 
-        // 2. Calculate input
+        // Calculate input
         const zMovement = Number(this.keyPress.forward) - Number(this.keyPress.backward);
         const xMovement = Number(this.keyPress.right) - Number(this.keyPress.left);
 
@@ -98,11 +98,11 @@ export class PlayerController {
             this.directionVect.normalize();
         }
 
-        // 3. Apply horizontal velocity
+        // Apply horizontal velocity
         this.playerVelocity.x = this.directionVect.x * this.playerWalkSpeed;
         this.playerVelocity.z = this.directionVect.z * this.playerWalkSpeed;
 
-        // 4. Apply Gravity
+        // Apply Gravity
         if (this.onGround && this.keyPress.jump) {
             this.playerVelocity.y = this.jump_force
             this.onGround = false
@@ -114,29 +114,38 @@ export class PlayerController {
         }
     }  
 
-    update(delta) {
+    // Replace your update(delta) function with this:
+update(delta) {
     this.movement(delta);
+
+    const targetHeight = this.keyPress.crouch ? 0.5 : 1.0; 
+    // Lerp the 'end' point for a smooth head bob/crouch
+    this.playerHitbox.end.y = THREE.MathUtils.lerp(this.playerHitbox.end.y, this.playerHitbox.start.y + targetHeight, 0.2);
+
     this.playerHitbox.translate(this.playerVelocity.clone().multiplyScalar(delta));
     this.playerCollision();
 
-    // 1. Prepare the data package
-    // We use 'this.playerHitbox.start' because that represents the feet/base position
+    // Stable Rotation Calculation (Fixes the 180-degree snap)
+    const direction = new THREE.Vector3();
+    this.camera.getWorldDirection(direction);
+    const angleY = Math.atan2(direction.x, direction.z);
+
     const myData = {
         position: {
-            x: this.playerHitbox.end.x,
-            y: this.playerHitbox.end.y,
-            z: this.playerHitbox.end.z
+            x: this.playerHitbox.start.x,
+            y: this.playerHitbox.start.y,
+            z: this.playerHitbox.start.z
         },
         rotation: {
-            y: this.camera.rotation.y // Other players need to see where you are looking
+            y: angleY // Sending the absolute world yaw
         },
         isCrouching: this.keyPress.crouch
     };
 
-    // 2. Send it to the server!
-    // We usually send this every frame, or 30 times a second
     this.socket.emit('playerMovement', myData);
 
+    // Camera Attachment
     this.camera.position.copy(this.playerHitbox.end);
+    this.camera.position.y += 0.1; // Eye level offset
     }
 }

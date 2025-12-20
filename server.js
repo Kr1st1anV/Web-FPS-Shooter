@@ -9,10 +9,8 @@ const io = require("socket.io")(http, {
 })
 
 const players = {};
-const AFK_TIMEOUT = 10000 // 5 minutes in milliseconds
+const AFK_TIMEOUT = 5 * 60 * 1000 // 5 minutes in milliseconds
 
-// Run a check every 10 seconds to see who is inactive
-// server.js
 setInterval(() => {
     const now = Date.now();
     
@@ -24,11 +22,10 @@ setInterval(() => {
 
             if (socketToKick) {
                 console.log(`Kicking ${id} for AFK`);
-                
-                // 1. Send the message FIRST
+
                 socketToKick.emit('kickReason', 'You were AFK for too long!');
                 
-                // 2. Disconnect them after a tiny delay (200ms) 
+                // Disconnect them after a tiny delay (200ms) 
                 // This gives the "kickReason" packet time to travel to the client
                 setTimeout(() => {
                     socketToKick.disconnect(true);
@@ -45,7 +42,7 @@ io.on('connection', (socket) => {
     //Create a new entry for this player
     players[socket.id] = {
         lastSeen: Date.now(),
-        position: { x: 3, y: 0, z: 3 },
+        position: { x: 10, y: 0.35, z: 10 }, // Y should be the radius of the capsule
         rotation: { y: 0 },
         isCrouching: false
     };
@@ -56,7 +53,7 @@ io.on('connection', (socket) => {
     //Tell everyone else a new player has joined
     socket.broadcast.emit('newPlayer', { id: socket.id, data: players[socket.id] });
 
-    // 4. Handle movement updates
+    //Handle movement updates
     socket.on('playerMovement', (movementData) => {
         if (players[socket.id]) {
             players[socket.id].position = movementData.position;

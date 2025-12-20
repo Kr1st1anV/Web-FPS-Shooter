@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { GLTFLoader } from 'three/examples/jsm/Addons.js'
 import { Octree } from 'three/examples/jsm/Addons.js'
 import { Capsule } from 'three/examples/jsm/Addons.js'
 import { PlayerController } from './characterMovement'
@@ -32,23 +33,19 @@ floor.rotateX(Math.PI/2)
 floor.position.y = -10
 scene.add(floor)
 
-// const gridHelper = new THREE.GridHelper(50,50)
-// gridHelper.position.y = -10
-// scene.add(gridHelper)
-
-
 //Wall Geo and Mat
-const geometry = new THREE.BoxGeometry( 1, 15 )
+const geometry = new THREE.BoxGeometry( 1, 15, 15 )
 const material = new THREE.MeshStandardMaterial( { color: 0x00ff00 } )
 const cube = new THREE.Mesh( geometry, material )
+cube.position.y = -3
 scene.add( cube )
 
 //const controls = new FirstPersonControls(camera, renderer.domElement) - Cool concept with FirstPersonControls - Grappling Movement
 
-let randomPos = Math.random() * 10
 const worldOctree = new Octree()
-const playerHitbox = new Capsule(new THREE.Vector3(randomPos ,0.35, randomPos),
-                                 new THREE.Vector3(randomPos, 1.0, randomPos), 
+const spawn = new THREE.Vector3(10,0,0)
+const playerHitbox = new Capsule(new THREE.Vector3(spawn.x ,0.35, spawn.z),
+                                 new THREE.Vector3(spawn.x, 1.0, spawn.z), 
                                  0.35)
 
 worldOctree.fromGraphNode(floor)
@@ -62,45 +59,60 @@ worldOctree.fromGraphNode(cube)
 const player = new PlayerController(camera, playerHitbox, worldOctree, socket)
 
 // Function to create a visual mesh for other players
-function createOtherPlayerMesh(id) {
-    const geo = new THREE.CapsuleGeometry(0.35,0.65);
+function createOtherPlayerMesh(id, initialData) {
+    const radius = 0.35;
+    const geometryHeight = 0.3;
+    const geo = new THREE.CapsuleGeometry(radius, geometryHeight);
+    
+    geo.translate(0, 0.5, 0); 
+
     const mat = new THREE.MeshStandardMaterial({ color: 0xff0000 });
     const mesh = new THREE.Mesh(geo, mat);
 
-    mesh.targetPosition = new THREE.Vector3(0,0,0)
-    mesh.targetRotationY = 0
-    mesh.targetCrouch = false
+    if (initialData) {
+        mesh.position.set(initialData.position.x, initialData.position.y, initialData.position.z);
+        mesh.targetPosition = new THREE.Vector3().copy(mesh.position);
+    }
+    mesh.targetRotationY = 0;
+    mesh.targetCrouch = false;
 
     scene.add(mesh);
     otherPlayers[id] = mesh;
 }
 
-// Socket Listeners
 socket.on('currentPlayers', (players) => {
     Object.keys(players).forEach((id) => {
-        if (id !== socket.id) createOtherPlayerMesh(id);
+        if (id !== socket.id) createOtherPlayerMesh(id, players[id]);
     });
 });
 
 //Game Loop
 const clock = new THREE.Clock()
+const max_steps = 5
 
 function animate() {
-  const delta = clock.getDelta()
-  player.update(delta)
+  const delta = Math.min(0.05, clock.getDelta())
+  
+  for (let i = 0; i < max_steps; i++) {
+    player.update(delta / max_steps)
+  }
 
   for(let id in otherPlayers) {
     const puppet = otherPlayers[id]
 
-    if (puppet.targetPosition) {
-        puppet.position.lerp(puppet.targetPosition, 0.15)
-    }
+        // Replace the rotation lerp inside animate() with this:
+    let diff = puppet.targetRotationY - puppet.rotation.y;
 
-    puppet.rotation.y = THREE.MathUtils.lerp(
-        puppet.rotation.y,
-        puppet.targetRotationY,
-        0.1
-    )
+    // Normalize the angle so it takes the shortest turn
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+
+    puppet.rotation.y += diff * 0.1; 
+
+    // Update position lerp to match the new pivot
+    if (puppet.targetPosition) {
+        puppet.position.lerp(puppet.targetPosition, 0.15);
+    }
 
     const targetScale = puppet.targetCrouch ? 0.5 : 1.0
     puppet.scale.y = THREE.MathUtils.lerp(puppet.scale.y, targetScale, 0.2)
@@ -109,6 +121,8 @@ function animate() {
   renderer.render( scene, camera )
 }
 
+
+//Tab Resize
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
@@ -122,6 +136,7 @@ socket.on('newPlayer', (info) => {
 });
 
 socket.on('playerMoved', (info) => {
+    if (info.id == socket.id) return
     const puppet = otherPlayers[info.id]
     if (puppet) {
         puppet.targetPosition = new THREE.Vector3(info.data.position.x, info.data.position.y, info.data.position.z)
